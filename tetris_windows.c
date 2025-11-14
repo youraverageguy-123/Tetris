@@ -814,13 +814,38 @@ void listProfiles() {
         return;
     }
 
-    printf("\n=== ALL PROFILES ===\n");
-    while (p) {
-        printf("%-15s Age: %-3d BestScore: %d\n", p->name, p->age, p->bestScore);
-        p = p->next;
+    // count profiles
+    int count = 0;
+    for (Profile *tmp = profileHead; tmp; tmp = tmp->next) count++;
+
+    // make array
+    Profile **arr = malloc(count * sizeof(Profile*));
+    int i = 0;
+    for (Profile *tmp = profileHead; tmp; tmp = tmp->next) {
+        arr[i++] = tmp;
     }
-    printf("=====================\n");
+
+    // comparator (descending by bestScore)
+    int cmp(const void *a, const void *b) {
+        Profile *pa = *(Profile **)a;
+        Profile *pb = *(Profile **)b;
+        return pb->bestScore - pa->bestScore;
+    }
+
+    // sort it
+    qsort(arr, count, sizeof(Profile*), cmp);
+
+    // print
+    printf("\n=== PROFILES SORTED BY BEST SCORE ===\n");
+    for (int j = 0; j < count; j++) {
+        printf("%-15s Age: %-3d BestScore: %d\n",
+            arr[j]->name, arr[j]->age, arr[j]->bestScore);
+    }
+    printf("=====================================\n");
+
+    free(arr);
 }
+
 
 /* Player Manager Menu */
 void playerManagerMenu() {
