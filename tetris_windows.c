@@ -18,10 +18,12 @@ static const int GRID_Y = 80; // top margin
 #define MAX_PLAYERS 200
 #define MIN_TIMER_MS 50
 #define BASE_TIMER_MS 400
-#define PLAYER_FILE "players.txt"
-#define MAX_PROFILES 200
-
-
+typedef struct Profile {
+    char name[50];
+    int age;
+    int bestScore;
+    struct Profile *next;
+} Profile;
 
 /* Forward prototypes (kept mostly same names so logic remains intact) */
 void showScores(void);
@@ -31,6 +33,17 @@ void drawGridAndCurrent(void);
 void drawNextPreview(int px, int py);
 void WriteToTable(void);
 void RotateCurrentIfPossible(void);
+
+void loadProfiles();
+void saveProfiles();
+void addProfile();
+Profile* searchProfileByName(const char *name);
+void searchProfile();
+void updateProfile();
+void deleteProfile();
+void listProfiles();
+void playerManagerMenu();
+
 
 
 /* --- Globals reused from your console version --- */
@@ -61,11 +74,6 @@ typedef struct {
     char name[50];
     int score;
 } Player;
-typedef struct {
-    char name[50];
-    int bestScore;
-} PlayerProfile;
-
 
 /* --- LINKED LIST --- */
 typedef struct Node {
@@ -238,7 +246,6 @@ void SetNewRandomShape(int shapeIndex) {
     if (!CheckPositionAt(current.array, current.width, current.row, current.col))
         GameOn = FALSE;
 }
-
 
 
 void RemoveFullRowsAndUpdateScore(void) {
@@ -497,87 +504,6 @@ void clearScores(void) {
     remove(SCORE_FILE);
     printf("All scores deleted.\n");
 }
-/*--- CRUD---*/
-/* --- PLAYER CRUD SYSTEM --- */
-
-int loadAllProfiles(PlayerProfile *arr, int max) {
-    FILE *f = fopen(PLAYER_FILE, "r");
-    if (!f) return 0;
-    int count = 0;
-    while (count < max && fscanf(f, "%49s %d", arr[count].name, &arr[count].bestScore) == 2)
-        count++;
-    fclose(f);
-    return count;
-}
-
-void saveAllProfiles(PlayerProfile *arr, int count) {
-    FILE *f = fopen(PLAYER_FILE, "w");
-    if (!f) return;
-    for (int i = 0; i < count; i++)
-        fprintf(f, "%s %d\n", arr[i].name, arr[i].bestScore);
-    fclose(f);
-}
-
-void updatePlayerScore(const char *name, int newScore) {
-    PlayerProfile list[MAX_PROFILES];
-    int count = loadAllProfiles(list, MAX_PROFILES);
-    int found = 0;
-
-    for (int i = 0; i < count; i++) {
-        if (strcmp(list[i].name, name) == 0) {
-            if (newScore > list[i].bestScore)
-                list[i].bestScore = newScore;
-            found = 1;
-            break;
-        }
-    }
-
-    if (!found && count < MAX_PROFILES) {
-        strcpy(list[count].name, name);
-        list[count].bestScore = newScore;
-        count++;
-    }
-
-    saveAllProfiles(list, count);
-}
-
-void showAllPlayers() {
-    PlayerProfile list[MAX_PROFILES];
-    int count = loadAllProfiles(list, MAX_PROFILES);
-
-    if (count == 0) {
-        printf("No player profiles.\n");
-        return;
-    }
-
-    printf("\n=== PLAYER PROFILES ===\n");
-    for (int i = 0; i < count; i++)
-        printf("%2d. %-20s Best Score: %d\n", i + 1, list[i].name, list[i].bestScore);
-    printf("=======================\n");
-}
-
-void deletePlayerByName() {
-    char target[50];
-    printf("Enter player name to delete: ");
-    scanf("%49s", target);
-
-    PlayerProfile list[MAX_PROFILES];
-    int count = loadAllProfiles(list, MAX_PROFILES);
-
-    int newCount = 0;
-    for (int i = 0; i < count; i++) {
-        if (strcmp(list[i].name, target) != 0)
-            list[newCount++] = list[i];
-    }
-
-    if (newCount == count)
-        printf("Player not found.\n");
-    else {
-        saveAllProfiles(list, newCount);
-        printf("Player deleted.\n");
-    }
-}
-
 
 /* --- GAME PLAY (Raylib GUI loop) --- */
 void playGame(const char *name) {
@@ -734,8 +660,13 @@ EndDrawing();
     // --- End of game ---
     safe_free_shape(&current);
     saveScore(name, score);
-    updatePlayerScore(name, score);
     freeQueue();
+    Profile *p = searchProfileByName(name);
+    if (p && score > p->bestScore) {
+        p->bestScore = score;
+        saveProfiles();
+}
+
 
     // If player lost naturally (not by pressing Q)
     if (!WindowShouldClose()) {
@@ -758,6 +689,165 @@ EndDrawing();
 
 /* --- MAIN MENU (keeps console menu intact) --- */
 static void flush_stdin(void) { int ch; while ((ch = getchar()) != '\n' && ch != EOF) {} }
+/* ====================== PLAYER PROFILE CRUD ====================== */
+
+#define PROFILE_DB "playerdb.txt"
+
+
+
+Profile *profileHead = NULL;
+
+/* Load all profiles from file */
+void loadProfiles() {
+    FILE *f = fopen(PROFILE_DB, "r");
+    if (!f) return;
+
+    Profile temp;
+    while (fscanf(f, "%49s %d %d", temp.name, &temp.age, &temp.bestScore) == 3) {
+        Profile *node = (Profile *)malloc(sizeof(Profile));
+        *node = temp;
+        node->next = profileHead;
+        profileHead = node;
+    }
+    fclose(f);
+}
+
+/* Save all profiles to file */
+void saveProfiles() {
+    FILE *f = fopen(PROFILE_DB, "w");
+    if (!f) return;
+
+    Profile *p = profileHead;
+    while (p) {
+        fprintf(f, "%s %d %d\n", p->name, p->age, p->bestScore);
+        p = p->next;
+    }
+    fclose(f);
+}
+
+/* Add a profile */
+void addProfile() {
+    Profile *p = (Profile *)malloc(sizeof(Profile));
+    printf("Enter name: ");
+    scanf("%49s", p->name);
+    printf("Enter age: ");
+    scanf("%d", &p->age);
+    printf("Enter best score: ");
+    scanf("%d", &p->bestScore);
+
+    p->next = profileHead;
+    profileHead = p;
+
+    saveProfiles();
+    printf("Profile added.\n");
+}
+
+/* Search a profile */
+Profile* searchProfileByName(const char *name) {
+    Profile *p = profileHead;
+    while (p) {
+        if (strcmp(p->name, name) == 0) return p;
+        p = p->next;
+    }
+    return NULL;
+}
+
+void searchProfile() {
+    char name[50];
+    printf("Enter name to search: ");
+    scanf("%49s", name);
+
+    Profile *p = searchProfileByName(name);
+    if (!p) printf("Profile not found.\n");
+    else {
+        printf("\nFOUND:\n");
+        printf("Name: %s\nAge: %d\nBest Score: %d\n", p->name, p->age, p->bestScore);
+    }
+}
+
+/* Update a profile */
+void updateProfile() {
+    char name[50];
+    printf("Enter name to update: ");
+    scanf("%49s", name);
+
+    Profile *p = searchProfileByName(name);
+    if (!p) { printf("Profile not found.\n"); return; }
+
+    printf("Enter new age: ");
+    scanf("%d", &p->age);
+    printf("Enter new best score: ");
+    scanf("%d", &p->bestScore);
+
+    saveProfiles();
+    printf("Updated successfully.\n");
+}
+
+/* Delete a profile */
+void deleteProfile() {
+    char name[50];
+    printf("Enter name to delete: ");
+    scanf("%49s", name);
+
+    Profile *prev = NULL, *curr = profileHead;
+
+    while (curr) {
+        if (strcmp(curr->name, name) == 0) {
+            if (!prev) profileHead = curr->next;
+            else prev->next = curr->next;
+            free(curr);
+            saveProfiles();
+            printf("Deleted.\n");
+            return;
+        }
+        prev = curr;
+        curr = curr->next;
+    }
+    printf("Profile not found.\n");
+}
+
+/* List all profiles */
+void listProfiles() {
+    Profile *p = profileHead;
+    if (!p) {
+        printf("No profiles found.\n");
+        return;
+    }
+
+    printf("\n=== ALL PROFILES ===\n");
+    while (p) {
+        printf("%-15s Age: %-3d BestScore: %d\n", p->name, p->age, p->bestScore);
+        p = p->next;
+    }
+    printf("=====================\n");
+}
+
+/* Player Manager Menu */
+void playerManagerMenu() {
+    int choice = 0;
+    do {
+        printf("\n==== PLAYER MANAGER ====\n");
+        printf("1. Add Profile\n");
+        printf("2. Search Profile\n");
+        printf("3. Update Profile\n");
+        printf("4. Delete Profile\n");
+        printf("5. List All Profiles\n");
+        printf("6. Back\n");
+        printf("Choose: ");
+        scanf("%d", &choice);
+
+        switch (choice) {
+            case 1: addProfile(); break;
+            case 2: searchProfile(); break;
+            case 3: updateProfile(); break;
+            case 4: deleteProfile(); break;
+            case 5: listProfiles(); break;
+            case 6: break;
+            default: printf("Invalid.\n");
+        }
+    } while (choice != 6);
+}
+
 
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -767,50 +857,71 @@ int main(void) {
     printf("Enter your name: ");
     if (scanf("%49s", name) != 1) return 1;
     flush_stdin();
+    loadProfiles();
+    // Auto create profile if not exists
+    Profile *existing = searchProfileByName(name);
+    if (!existing) {
+        Profile *p = (Profile *)malloc(sizeof(Profile));
+        strncpy(p->name, name, 49);
+        p->name[49] = '\0';
+        p->age = 0;          // default age
+        p->bestScore = 0;    // default score
+        p->next = profileHead;
+        profileHead = p;
+
+        saveProfiles();
+        printf("New profile created for %s.\n", name);
+    }
+
+
 
     do {
-        printf("\n==== TETRIS MENU ====\n");
-        printf("1. New Game\n");
-        printf("2. View High Scores\n");
-        printf("3. Clear High Scores\n");
-        printf("4. Quit\n");
-        printf("5. Players\n");
-        printf("Choose an option: ");
-        if (scanf("%d", &choice) != 1) { flush_stdin(); printf("Invalid choice.\n"); continue; }
+    printf("\n==== TETRIS MENU ====\n");
+    printf("1. New Game\n");
+    printf("2. View High Scores\n");
+    printf("3. Clear High Scores\n");
+    printf("4. Player Manager (CRUD)\n");
+    printf("5. Quit\n");
+    printf("Choose an option: ");
+
+    if (scanf("%d", &choice) != 1) {
         flush_stdin();
+        printf("Invalid choice.\n");
+        continue;
+    }
+    flush_stdin();
 
-        switch (choice) {
-            case 1: memset(Table, 0, sizeof(Table)); score = 0; timer_ms = BASE_TIMER_MS; GameOn = TRUE; playGame(name); break;
-            case 2: showScores(); break;
-            case 3: clearScores(); break;
-            case 4: printf("Goodbye, %s!\n", name); break;
-            case 5: {
-    int pc = 0;
-    do {
-        printf("\n--- PLAYER MANAGER ---\n");
-        printf("1. Show all players\n");
-        printf("2. Add new player\n");
-        printf("3. Delete a player\n");
-        printf("4. Back\n");
-        printf("Choose: ");
-        scanf("%d", &pc);
-        flush_stdin();
+    switch (choice) {
+        case 1:
+            memset(Table, 0, sizeof(Table));
+            score = 0;
+            timer_ms = BASE_TIMER_MS;
+            GameOn = TRUE;
+            playGame(name);
+            break;
 
-        if (pc == 1) showAllPlayers();
-        else if (pc == 2) {
-            char newName[50];
-            printf("Enter new player name: ");
-            scanf("%49s", newName);
-            updatePlayerScore(newName, 0);
-        }
-        else if (pc == 3) deletePlayerByName();
-    } while (pc != 4);
-    break;
-}
+        case 2:
+            showScores();
+            break;
 
-            default: printf("Invalid choice.\n");
-        }
-    } while (choice != 4);
+        case 3:
+            clearScores();
+            break;
+
+        case 4:
+            playerManagerMenu();
+            break;
+
+        case 5:
+            printf("Goodbye, %s!\n", name);
+            break;
+
+        default:
+            printf("Invalid choice.\n");
+    }
+
+} while (choice != 5);
+
 
     return 0;
 }
