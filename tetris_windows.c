@@ -810,7 +810,71 @@ void deleteProfile_GUI() {
                 EndDrawing();
             }
         }
-    
+int compareProfilesDesc(const void *a, const void *b) {
+    Profile *pa = *(Profile**)a;
+    Profile *pb = *(Profile**)b;
+    return pb->bestScore - pa->bestScore;
+}
+
+void deleteAllProfiles_GUI() {
+    SetExitKey(KEY_NULL);
+
+    // Confirm screen
+    while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        Color pulse = neonPulse();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
+
+        const char *msg = "Delete ALL profiles?";
+        const char *warn = "This cannot be undone.";
+        const char *optYes = "Y - Confirm";
+        const char *optNo  = "N / Back";
+
+        DrawText(msg,  w/2 - MeasureText(msg,  36)/2, h/3,     36, RED);
+        DrawText(warn, w/2 - MeasureText(warn, 24)/2, h/3 +40, 24, LIGHTGRAY);
+        DrawText(optYes,w/2 - MeasureText(optYes,24)/2, h/3+120,24, GREEN);
+        DrawText(optNo, w/2 - MeasureText(optNo, 24)/2, h/3+160,24, RAYWHITE);
+
+        EndDrawing();
+
+        if (IsKeyPressed(KEY_Y)) break;
+        if (IsKeyPressed(KEY_N) || IsKeyPressed(KEY_ESCAPE)) return;
+    }
+
+    // DELETE EVERYTHING
+    Profile *p = profileHead;
+    while (p) {
+        Profile *temp = p;
+        p = p->next;
+        free(temp);
+    }
+    profileHead = NULL;
+
+    // wipe file
+    remove(PROFILE_DB);
+
+    // Success message
+    while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        Color pulse = neonPulse();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
+
+        const char *msg = "All Profiles Deleted!";
+        DrawText(msg, w/2 - MeasureText(msg, 32)/2, h/2 - 20, 32, RED);
+
+        if (DrawBackButton()) return;
+
+        EndDrawing();
+    }
+}
 
 
 
@@ -818,6 +882,27 @@ void listProfiles_GUI() {
     SetExitKey(KEY_NULL);
     int scroll = 0;
 
+    // 1. Count profiles
+    int count = 0;
+    Profile *p = profileHead;
+    while (p) {
+        count++;
+        p = p->next;
+    }
+
+    // 2. Put profiles in array
+    Profile **arr = malloc(sizeof(Profile*) * count);
+    p = profileHead;
+    for (int i = 0; i < count; i++) {
+        arr[i] = p;
+        p = p->next;
+    }
+
+    // 3. Sort by bestScore descending
+    qsort(arr, count, sizeof(Profile*), compareProfilesDesc);
+
+
+    // 4. Draw sorted list
     while (1) {
         int w = GetScreenWidth();
         int h = GetScreenHeight();
@@ -833,30 +918,30 @@ void listProfiles_GUI() {
 
         int y = 120 + scroll;
 
-        // Draw profile rows centered
-        Profile *p = profileHead;
-        while (p) {
+        for (int i = 0; i < count; i++) {
+            Profile *pr = arr[i];
             DrawText(
                 TextFormat("%s | Played: %d | Best: %d | Time: %02d:%02d",
-                    p->name, p->timesPlayed, p->bestScore, p->totalTime/60, p->totalTime%60),
+                    pr->name, pr->timesPlayed, pr->bestScore,
+                    pr->totalTime/60, pr->totalTime%60),
                 w/2 - 250,
                 y,
                 22,
                 RAYWHITE
             );
             y += 35;
-            p = p->next;
         }
 
-        // Scroll wheel
         scroll += GetMouseWheelMove() * -20;
 
-     
-        if (DrawBackButton()) return;
+        if (DrawBackButton()) break;
 
         EndDrawing();
     }
+
+    free(arr);
 }
+
 void showScores_GUI() {
     Player p[MAX_PLAYERS];
     int count = load_all_scores(p, MAX_PLAYERS);
@@ -906,12 +991,14 @@ void playerManagerMenu_GUI(void) {
         float bh = h * 0.07f;
         float cx = w * 0.50f - bw/2;
 
-        Button addBtn    = {{ cx, h * 0.30f, bw, bh }, "Add Profile" };
-        Button searchBtn = {{ cx, h * 0.40f, bw, bh }, "Search Profile" };
-        Button updateBtn = {{ cx, h * 0.50f, bw, bh }, "Update Profile" };
-        Button deleteBtn = {{ cx, h * 0.60f, bw, bh }, "Delete Profile" };
-        Button listBtn   = {{ cx, h * 0.70f, bw, bh }, "List All Profiles" };
-        Button backBtn   = {{ cx, h * 0.80f, bw, bh }, "Back" };
+        Button addBtn       = {{ cx, h * 0.30f, bw, bh }, "Add Profile" };
+        Button searchBtn    = {{ cx, h * 0.40f, bw, bh }, "Search Profile" };
+        Button updateBtn    = {{ cx, h * 0.50f, bw, bh }, "Update Profile" };
+        Button deleteBtn    = {{ cx, h * 0.60f, bw, bh }, "Delete Profile" };
+        Button deleteAllBtn = {{ cx, h * 0.70f, bw, bh }, "Delete ALL Profiles" };
+        Button listBtn      = {{ cx, h * 0.80f, bw, bh }, "List All Profiles" };
+        Button backBtn      = {{ cx, h * 0.90f, bw, bh }, "Back" };
+
 
         BeginDrawing();
         ClearBackground((Color){15,15,15,255});
@@ -926,6 +1013,7 @@ void playerManagerMenu_GUI(void) {
         DrawButtonTheme(searchBtn);
         DrawButtonTheme(updateBtn);
         DrawButtonTheme(deleteBtn);
+        DrawButtonTheme(deleteAllBtn);
         DrawButtonTheme(listBtn);
         DrawButtonTheme(backBtn);
 
@@ -935,6 +1023,7 @@ void playerManagerMenu_GUI(void) {
         if (ButtonClicked(searchBtn)) searchProfile_GUI();
         if (ButtonClicked(updateBtn)) updateProfile_GUI();
         if (ButtonClicked(deleteBtn)) deleteProfile_GUI();
+        if (ButtonClicked(deleteAllBtn)) deleteAllProfiles_GUI();
         if (ButtonClicked(listBtn))   listProfiles_GUI();
         if (ButtonClicked(backBtn))   return;
 
@@ -1270,6 +1359,7 @@ void playGame(Profile *player) {
 
         /// update stats only if user saved
     if (saveChoice == 1) {
+        saveScore(player->name, score);
         player->timesPlayed++;
 
         if (score > player->bestScore)
