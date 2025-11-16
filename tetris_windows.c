@@ -62,6 +62,7 @@ int score = 0;
 int GameOn = TRUE;
 int timer_ms = BASE_TIMER_MS;
 int level = 0;
+int selectedProfileIndex = -1;
 
 
 
@@ -86,6 +87,14 @@ typedef struct {
     char name[50];
     int score;
 } Player;
+typedef struct {
+    int open;
+    int index;
+    int x, y;
+} PopupMenu;
+
+PopupMenu popup = {0, -1, 0, 0};
+
 
 /* --- LINKED LIST --- */
 typedef struct Node {
@@ -876,71 +885,215 @@ void deleteAllProfiles_GUI() {
     }
 }
 
+void drawProfilePopup(Profile *pr) {
+    int w = GetScreenWidth();
+    int h = GetScreenHeight();
+
+    int boxW = 260;
+    int boxH = 140;
+
+    int x = popup.x;
+    int y = popup.y;
+
+    // keep popup inside screen
+    if (x + boxW > w) x = w - boxW - 10;
+    if (y + boxH > h) y = h - boxH - 10;
+
+    Rectangle box = { x, y, boxW, boxH };
+
+    DrawRectangleRec(box, (Color){30,30,30,240});
+    DrawRectangleLinesEx(box, 2, neonPulse());
+
+    DrawText("Profile Options", x + 10, y + 10, 22, RAYWHITE);
+
+    Button btnEdit = { { x + 20, y + 50, boxW - 40, 30 }, "Edit Name" };
+    Button btnDelete = { { x + 20, y + 90, boxW - 40, 30 }, "Delete Profile" };
+
+    DrawButtonTheme(btnEdit);
+    DrawButtonTheme(btnDelete);
+
+    if (ButtonClicked(btnEdit)) {
+        popup.open = 0;
+
+        // edit name
+        if (themedInputBox("Enter New Name:")) {
+            strncpy(pr->name, inputBuffer, 49);
+            pr->name[49] = 0;
+            saveProfiles();
+        }
+    }
+
+    if (ButtonClicked(btnDelete)) {
+        popup.open = 0;
+
+        // delete this profile properly
+        Profile *prev = NULL, *cur = profileHead;
+        while (cur) {
+            if (cur == pr) {
+                if (prev) prev->next = cur->next;
+                else profileHead = cur->next;
+                free(cur);
+                saveProfiles();
+                popup.index = -999;
+                return;
+            }
+            prev = cur;
+            cur = cur->next;
+        }
+    }
+}
 
 
 void listProfiles_GUI() {
     SetExitKey(KEY_NULL);
     int scroll = 0;
 
-    // 1. Count profiles
+    // Count profiles
     int count = 0;
     Profile *p = profileHead;
-    while (p) {
-        count++;
-        p = p->next;
+    while (p) { count++; p = p->next; }
+
+    if (count == 0) {
+        while (1) {
+            BeginDrawing();
+            ClearBackground((Color){20,20,20,255});
+            DrawText("No Profiles Found", 50, 50, 28, RED);
+            if (DrawBackButton()) return;
+            EndDrawing();
+        }
     }
 
-    // 2. Put profiles in array
+    // Convert LL → array
     Profile **arr = malloc(sizeof(Profile*) * count);
     p = profileHead;
-    for (int i = 0; i < count; i++) {
-        arr[i] = p;
-        p = p->next;
-    }
+    for (int i = 0; i < count; i++) { arr[i] = p; p = p->next; }
 
-    // 3. Sort by bestScore descending
+    // Sort by best score
     qsort(arr, count, sizeof(Profile*), compareProfilesDesc);
 
-
-    // 4. Draw sorted list
     while (1) {
         int w = GetScreenWidth();
         int h = GetScreenHeight();
+
+        int tableX = w * 0.08f;
+        int tableW = w * 0.84f;
+        int rowH   = 44;
+
+        // dynamic columns
+        int colNameW  = tableW * 0.32f;
+        int colPlayW  = tableW * 0.16f;
+        int colBestW  = tableW * 0.22f;
+        int colTimeW  = tableW * 0.30f;
 
         BeginDrawing();
         ClearBackground((Color){15,15,15,255});
         DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
 
         Color pulse = neonPulse();
-        const char *title = "PLAYER LIST";
-        int tw = MeasureText(title, 36);
-        DrawText(title, w/2 - tw/2, 40, 36, pulse);
+        DrawText("PLAYER PROFILES", w/2 - MeasureText("PLAYER PROFILES", 42)/2, 30, 42, pulse);
 
         int y = 120 + scroll;
 
+        // HEADER
+        DrawRectangle(tableX, y, tableW, rowH, (Color){35,35,35,255});
+        DrawRectangleLines(tableX, y, tableW, rowH, pulse);
+
+        DrawText("Name",        tableX + 10,              y + 10, 22, RAYWHITE);
+        DrawText("Played",      tableX + colNameW + 10,   y + 10, 22, RAYWHITE);
+        DrawText("Best Score",  tableX + colNameW + colPlayW + 10, y + 10, 22, RAYWHITE);
+        DrawText("Total Time",  tableX + colNameW + colPlayW + colBestW + 10, y + 10, 22, RAYWHITE);
+
+        y += rowH;
+
+        Vector2 m = GetMousePosition();
+
         for (int i = 0; i < count; i++) {
             Profile *pr = arr[i];
-            DrawText(
-                TextFormat("%s | Played: %d | Best: %d | Time: %02d:%02d",
-                    pr->name, pr->timesPlayed, pr->bestScore,
-                    pr->totalTime/60, pr->totalTime%60),
-                w/2 - 250,
-                y,
-                22,
-                RAYWHITE
-            );
-            y += 35;
+
+            Rectangle rowRect = { tableX, y, tableW, rowH };
+
+            // hover highlight
+            int hover = CheckCollisionPointRec(m, rowRect);
+            int selected = (i == selectedProfileIndex);
+
+            Color bg = (i % 2 == 0) ? (Color){30,30,30,220} : (Color){40,40,40,220};
+            if (hover) bg = (Color){60,60,60,240};
+            if (selected) bg = (Color){80,20,20,240};
+
+            DrawRectangleRec(rowRect, bg);
+            DrawRectangleLines(tableX, y, tableW, rowH, (Color){70,70,70,255});
+
+            // TEXT
+            DrawText(pr->name, tableX + 10, y + 12, 20, RAYWHITE);
+            DrawText(TextFormat("%d", pr->timesPlayed),
+                    tableX + colNameW + 10, y + 12, 20, LIGHTGRAY);
+            DrawText(TextFormat("%d", pr->bestScore),
+                    tableX + colNameW + colPlayW + 10, y + 12, 20, LIGHTGRAY);
+            DrawText(TextFormat("%02d:%02d", pr->totalTime/60, pr->totalTime%60),
+                    tableX + colNameW + colPlayW + colBestW + 10, y + 12, 20, LIGHTGRAY);
+
+                        // Left click = select row
+            if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                selectedProfileIndex = i;
+            }
+
+            // Right click = open popup menu
+            if (hover && IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+                popup.open = 1;
+                popup.index = i;
+                popup.x = m.x;
+                popup.y = m.y;
+            }
+
+
+
+            y += rowH;
         }
 
         scroll += GetMouseWheelMove() * -20;
+        if (popup.open && popup.index >= 0 && popup.index < count) {
+            drawProfilePopup(arr[popup.index]);
+        }
+
+        // check if delete happened
+        if (popup.index == -999) {
+            popup.index = -1;
+
+            // free old arr
+            free(arr);
+
+            // rebuild count
+            count = 0;
+            p = profileHead;
+            while (p) { count++; p = p->next; }
+
+            // if empty, exit back
+            if (count == 0) return;
+
+            // rebuild arr
+            arr = malloc(sizeof(Profile*) * count);
+            p = profileHead;
+            for (int i = 0; i < count; i++) {
+                arr[i] = p;
+                p = p->next;
+            }
+
+            // re-sort
+            qsort(arr, count, sizeof(Profile*), compareProfilesDesc);
+        }
+
 
         if (DrawBackButton()) break;
 
         EndDrawing();
     }
+    popup.open = 0;
+    popup.index = -1;
+
 
     free(arr);
 }
+
 
 void showScores_GUI() {
     Player p[MAX_PLAYERS];
