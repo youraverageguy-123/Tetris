@@ -6,9 +6,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
-static const int CELL = 26; // pixel size for cells
-static const int GRID_X = 40; // left margin
-static const int GRID_Y = 80; // top margin
+int CELL = 26;
 
 #define ROWS 20
 #define COLS 15
@@ -20,10 +18,13 @@ static const int GRID_Y = 80; // top margin
 #define BASE_TIMER_MS 400
 typedef struct Profile {
     char name[50];
-    int age;
+    int timesPlayed;
     int bestScore;
     struct Profile *next;
 } Profile;
+Profile *profileHead = NULL;
+Profile *currentPlayer = NULL;
+
 
 /* Forward prototypes (kept mostly same names so logic remains intact) */
 void showScores(void);
@@ -33,17 +34,24 @@ void drawGridAndCurrent(void);
 void drawNextPreview(int px, int py);
 void WriteToTable(void);
 void RotateCurrentIfPossible(void);
-
+void saveProfiles(void);
+int themedInputBox(const char *prompt);
+void addProfile_GUI(void);
+void searchProfile_GUI(void);
+void updateProfile_GUI(void);
+void deleteProfile_GUI(void);
+void listProfiles_GUI(void);
+int showStartScreen(void);
+int askSaveDataScreen(int finalScore);
+int showGameOverScreen(const char *playerName);
+void resetGameState(void);
+void playGame(Profile *player);
 void loadProfiles();
-void saveProfiles();
-void addProfile();
 Profile* searchProfileByName(const char *name);
-void searchProfile();
-void updateProfile();
-void deleteProfile();
-void listProfiles();
-void playerManagerMenu();
+void playerManagerMenu_GUI(void);
 
+int GRID_X = 40;
+int GRID_Y = 80;
 
 
 /* --- Globals reused from your console version --- */
@@ -52,6 +60,8 @@ int score = 0;
 int GameOn = TRUE;
 int timer_ms = BASE_TIMER_MS;
 int level = 0;
+
+
 
 /* --- SHAPES --- */
 static const signed char S0_0[3][3] = {{0,1,1},{1,1,0},{0,0,0}};
@@ -83,6 +93,16 @@ typedef struct Node {
 
 Node *head = NULL;
 Node *tail = NULL;
+Color neonPulse() {
+    float t = GetTime();
+    int r = (int)(128 + 127 * sin(t * 2.0));
+    int g = (int)(128 + 127 * sin(t * 2.0 + 2.0));
+    int b = (int)(128 + 127 * sin(t * 2.0 + 4.0));
+    return (Color){r, g, b, 255};
+}
+
+
+
 
 void enqueueShape(int shapeIndex) {
     Node *newNode = (Node *)malloc(sizeof(Node));
@@ -268,8 +288,9 @@ void RemoveFullRowsAndUpdateScore(void) {
                 drawGridAndCurrent();
 
                 // Draw sidebar (HUD) so it doesn’t blink away
-                int sidebarX = GRID_X + COLS * CELL + 70;
-                int sidebarY = GRID_Y + 20;
+                int sidebarX = GRID_X + COLS * CELL + (CELL * 2);
+                int sidebarY = GRID_Y;
+
                 float t = GetTime();
                 int r = (int)(128 + 127 * sin(t * 2.0));
                 int g = (int)(128 + 127 * sin(t * 2.0 + 2.0));
@@ -390,70 +411,7 @@ int ManipulateCurrent(int action, int *shapeIndex) {
     }
     return changed;
 }
-int showGameOverScreen(const char *name) {
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        ClearBackground(BLACK);
 
-        const char *msg = "GAME OVER";
-        const char *sub = TextFormat("Final Score: %d", score);
-        const char *opt1 = "Press R to Retry";
-        const char *opt2 = "Press Q to Quit";
-
-        int font1 = 72;
-        int textW = MeasureText(msg, font1);
-        float t = GetTime();
-        Color pulse = (Color){255, (int)(64 + 64 * sin(t * 3)), (int)(64 + 64 * sin(t * 3)), 255};
-        DrawText(msg, GetScreenWidth()/2 - textW/2, GetScreenHeight()/2 - 120, font1, pulse);
-
-
-        DrawText(sub, GetScreenWidth()/2 - MeasureText(sub, 32)/2, GetScreenHeight()/2 - 40, 32, RAYWHITE);
-        DrawText(opt1, GetScreenWidth()/2 - MeasureText(opt1, 20)/2, GetScreenHeight()/2 + 60, 20, LIGHTGRAY);
-        DrawText(opt2, GetScreenWidth()/2 - MeasureText(opt2, 20)/2, GetScreenHeight()/2 + 90, 20, LIGHTGRAY);
-
-        EndDrawing();
-
-        if (IsKeyPressed(KEY_R)) return 1;  // retry
-        if (IsKeyPressed(KEY_Q)) return 0;  // quit
-    }
-    return 0;
-}
-void showStartScreen(void) {
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        ClearBackground(BLACK);
-
-        const char *title = "TETRIS";
-        const char *sub = "Press ENTER to start";
-        const char *hint = "Press Q to quit";
-
-        int font1 = 96;
-        int font2 = 28;
-        int w1 = MeasureText(title, font1);
-        int w2 = MeasureText(sub, font2);
-
-                // animate color using time
-        float t = GetTime();
-        int r = (int)(128 + 127 * sin(t * 2.0));   // red oscillates 0–255
-        int g = (int)(128 + 127 * sin(t * 2.0 + 2.0)); // green with phase shift
-        int b = (int)(128 + 127 * sin(t * 2.0 + 4.0)); // blue with phase shift
-        Color flash = (Color){ r, g, b, 255 };
-
-        // draw animated title
-        DrawText(title, GetScreenWidth()/2 - w1/2, GetScreenHeight()/2 - 150, font1, flash);
-
-        DrawText(sub, GetScreenWidth()/2 - w2/2, GetScreenHeight()/2 + 30, font2, LIGHTGRAY);
-        DrawText(hint, GetScreenWidth()/2 - MeasureText(hint, 18)/2, GetScreenHeight()/2 + 80, 18, GRAY);
-
-        EndDrawing();
-
-        if (IsKeyPressed(KEY_ENTER)) break;
-        if (IsKeyPressed(KEY_Q)) {
-            CloseWindow();
-            exit(0);  // user quit before starting
-        }
-    }
-}
 void WriteToTable(void) {
     for (int i = 0; i < current.width; ++i)
         for (int j = 0; j < current.width; ++j)
@@ -505,187 +463,8 @@ void clearScores(void) {
     printf("All scores deleted.\n");
 }
 
-/* --- GAME PLAY (Raylib GUI loop) --- */
-void playGame(const char *name) {
-    
-    
-
-    // init window
-    int winW = GRID_X + COLS * CELL + 320;
-    int winH = GRID_Y + ROWS * CELL + 80;
-    printf("Starting Tetris GUI...\n");
-    fflush(stdout);
-
-    InitWindow(winW, winH, "Tetris - Raylib GUI");
-    SetTargetFPS(144);
-    freeQueue();
-    for (int i = 0; i < 3; ++i) enqueueShape(rand() % 7);
-    int shapeIndex = dequeueShape();
-    enqueueShape(rand() % 7);
-    SetNewRandomShape(shapeIndex);
-    showStartScreen();
-    
 
 
-
-    double nextFall = GetTime() + timer_ms / 1000.0;
-    int needRedraw = 1;
-    int paused = 0;
-    double startTime = GetTime();  
-
-
-    while (GameOn && !WindowShouldClose()) {
-        // input
-        if (IsKeyPressed(KEY_Q)) { GameOn = FALSE; break; }
-        if (IsKeyPressed(KEY_P)) paused = !paused;
-        if (!paused) {
-    // --- Movement inputs ---
-    if (IsKeyPressed(KEY_A) || IsKeyDown(KEY_LEFT)) {
-        if (ManipulateCurrent('a', &shapeIndex)) needRedraw = 1;
-    }
-    if (IsKeyPressed(KEY_D) || IsKeyDown(KEY_RIGHT)) {
-        if (ManipulateCurrent('d', &shapeIndex)) needRedraw = 1;
-    }
-    if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) {
-        if (ManipulateCurrent('w', &shapeIndex)) needRedraw = 1;
-    }
-
-    // --- Hard drop (Space key) ---
-    if (IsKeyPressed(KEY_SPACE)) {
-        while (CheckPositionAt(current.array, current.width, current.row + 1, current.col)) {
-            current.row++;
-        }
-        WriteToTable();
-        RemoveFullRowsAndUpdateScore();
-        shapeIndex = dequeueShape();
-        enqueueShape(rand() % 7);
-        SetNewRandomShape(shapeIndex);
-        needRedraw = 1;
-    }
-
-    // --- Soft drop (holding S or DOWN) ---
-    double now = GetTime();
-    double fallDelay = timer_ms / 1000.0;
-
-    // If player is holding S or Down, fall much faster
-    if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) {
-        fallDelay = 0.06; // 60 ms per fall, smooth soft drop
-    }
-
-    if (now >= nextFall) {
-        if (ManipulateCurrent('s', &shapeIndex)) needRedraw = 1;
-        nextFall = now + fallDelay;
-    }
-}
-        // --- Dynamic difficulty scaling ---
-    double elapsed = GetTime() - startTime;
-
-    // Level increases every 30 seconds OR every 1000 score points, whichever is higher
-    int timeLevel = (int)(elapsed /30.0);
-    int scoreLevel = score / 1000;
-    level = (timeLevel > scoreLevel) ? timeLevel : scoreLevel;
-
-    // Gravity decreases as level increases (faster drops)
-    int new_timer = BASE_TIMER_MS - (level * 15);
-    if (new_timer < MIN_TIMER_MS) new_timer = MIN_TIMER_MS;
-    timer_ms = new_timer;
-
-
-
-        // drawing
-    BeginDrawing();
-    ClearBackground((Color){ 20, 20, 20, 255 });  // Dark gray background
-    // Soft vignette background for visual depth
-    DrawRectangleGradientV(0, 0, winW, winH, (Color){10, 10, 10, 255}, (Color){35, 35, 35, 255});  // consistent dark theme
-
-if (!paused) {
-    // --- Normal game rendering ---
-    int sidebarX = GRID_X + COLS * CELL + 70;
-    int sidebarY = GRID_Y + 20;
-
-    float t = GetTime();
-    int r = (int)(128 + 127 * sin(t * 2.0));
-    int g = (int)(128 + 127 * sin(t * 2.0 + 2.0));
-    int b = (int)(128 + 127 * sin(t * 2.0 + 4.0));
-    Color titleColor = (Color){r, g, b, 255};
-    DrawText("TETRIS", GRID_X, 20, 32, titleColor);
-    DrawText(TextFormat("Score: %d", score), sidebarX, sidebarY, 22, RAYWHITE);
-    DrawText(TextFormat("Level: %d", level), sidebarX, sidebarY + 30, 18, LIGHTGRAY);
-    DrawText(TextFormat("Gravity: %d ms", timer_ms), sidebarX, sidebarY + 50, 18, LIGHTGRAY);
-
-
-    DrawText("Next:", sidebarX, sidebarY + 70, 20, DARKGRAY);
-    drawNextPreview(sidebarX + 40, sidebarY + 95);
-
-    int controlBoxX = sidebarX - 15;
-    int controlBoxY = sidebarY + 190;
-    int controlBoxW = 250;
-    int controlBoxH = 160;
-
-    DrawRectangle(controlBoxX, controlBoxY, controlBoxW, controlBoxH, Fade((Color){50,50,50,255}, 0.6f));
-    DrawRectangleLines(controlBoxX, controlBoxY, controlBoxW, controlBoxH, (Color){90,90,90,255});
-
-    int controlTextY = controlBoxY + 10;
-    DrawText("Controls:", sidebarX, sidebarY + 210, 16, RAYWHITE);
-    DrawText("A/D or right/left arrows : Move", sidebarX, sidebarY + 230, 14, LIGHTGRAY);
-    DrawText("S or down arrow : Soft Drop", sidebarX, sidebarY + 250, 14, LIGHTGRAY);
-    DrawText("Space : Hard Drop", sidebarX, sidebarY + 270, 14, LIGHTGRAY);
-    DrawText("W or up arrow : Rotate", sidebarX, sidebarY + 290, 14, LIGHTGRAY);
-    DrawText("P: Pause, Q: Quit", sidebarX, sidebarY + 310, 14, LIGHTGRAY);
-
-
-    drawGridAndCurrent();
-}
-else {
-    // --- Pause overlay ---
-    DrawRectangle(0, 0, winW, winH, Fade(BLACK, 0.6f));
-    const char *pauseText = "PAUSED";
-    int fontSize = 64;
-    int textWidth = MeasureText(pauseText, fontSize);
-    int x = winW/2 - textWidth/2;
-    int y = winH/2 - fontSize/2;
-    DrawText(pauseText, x, y, fontSize, RAYWHITE);
-
-    const char *resumeHint = "Press P to resume";
-    int hintSize = 22;
-    int hintWidth = MeasureText(resumeHint, hintSize);
-    DrawText(resumeHint, winW/2 - hintWidth/2, y + fontSize + 15, hintSize, LIGHTGRAY);
-}
-
-EndDrawing();
-
-        if (needRedraw) needRedraw = 0;
-    }
-
-    // --- End of game ---
-    safe_free_shape(&current);
-    saveScore(name, score);
-    freeQueue();
-    Profile *p = searchProfileByName(name);
-    if (p && score > p->bestScore) {
-        p->bestScore = score;
-        saveProfiles();
-}
-
-
-    // If player lost naturally (not by pressing Q)
-    if (!WindowShouldClose()) {
-        int choice = showGameOverScreen(name);
-        if (choice == 1) {
-            // Retry game
-            memset(Table, 0, sizeof(Table));
-            score = 0;
-            timer_ms = BASE_TIMER_MS;
-            GameOn = TRUE;
-            playGame(name);  // restart without going to console
-            return;
-        }
-    }
-
-    // Quit back to console
-    CloseWindow();
-
-    }
 
 /* --- MAIN MENU (keeps console menu intact) --- */
 static void flush_stdin(void) { int ch; while ((ch = getchar()) != '\n' && ch != EOF) {} }
@@ -695,7 +474,6 @@ static void flush_stdin(void) { int ch; while ((ch = getchar()) != '\n' && ch !=
 
 
 
-Profile *profileHead = NULL;
 
 /* Load all profiles from file */
 void loadProfiles() {
@@ -703,7 +481,8 @@ void loadProfiles() {
     if (!f) return;
 
     Profile temp;
-    while (fscanf(f, "%49s %d %d", temp.name, &temp.age, &temp.bestScore) == 3) {
+    while (fscanf(f, "%49s %d %d", temp.name, &temp.timesPlayed, &temp.bestScore) == 3)
+{
         Profile *node = (Profile *)malloc(sizeof(Profile));
         *node = temp;
         node->next = profileHead;
@@ -719,28 +498,14 @@ void saveProfiles() {
 
     Profile *p = profileHead;
     while (p) {
-        fprintf(f, "%s %d %d\n", p->name, p->age, p->bestScore);
+        fprintf(f, "%s %d %d\n", p->name, p->timesPlayed, p->bestScore);
+
         p = p->next;
     }
     fclose(f);
 }
 
-/* Add a profile */
-void addProfile() {
-    Profile *p = (Profile *)malloc(sizeof(Profile));
-    printf("Enter name: ");
-    scanf("%49s", p->name);
-    printf("Enter age: ");
-    scanf("%d", &p->age);
-    printf("Enter best score: ");
-    scanf("%d", &p->bestScore);
 
-    p->next = profileHead;
-    profileHead = p;
-
-    saveProfiles();
-    printf("Profile added.\n");
-}
 
 /* Search a profile */
 Profile* searchProfileByName(const char *name) {
@@ -752,201 +517,757 @@ Profile* searchProfileByName(const char *name) {
     return NULL;
 }
 
-void searchProfile() {
-    char name[50];
-    printf("Enter name to search: ");
-    scanf("%49s", name);
 
-    Profile *p = searchProfileByName(name);
-    if (!p) printf("Profile not found.\n");
-    else {
-        printf("\nFOUND:\n");
-        printf("Name: %s\nAge: %d\nBest Score: %d\n", p->name, p->age, p->bestScore);
+typedef struct {
+    Rectangle rect;
+    const char *label;
+} Button;
+
+int ButtonClicked(Button b) {
+    Vector2 m = GetMousePosition();
+    return CheckCollisionPointRec(m, b.rect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+
+
+
+void DrawButtonTheme(Button b) {
+    Vector2 m = GetMousePosition();
+    int hover = CheckCollisionPointRec(m, b.rect);
+
+    Color border = hover ? neonPulse() : (Color){90,90,90,255};
+    Color fill   = hover ? (Color){50,50,50,255} : (Color){30,30,30,255};
+
+    DrawRectangleRec(b.rect, fill);
+    DrawRectangleLinesEx(b.rect, 2, border);
+
+    int w = MeasureText(b.label, 22);
+    DrawText(b.label, b.rect.x + b.rect.width/2 - w/2, b.rect.y + 8, 22, RAYWHITE);
+}
+
+char inputBuffer[50];
+
+int themedInputBox(const char *prompt) {
+    SetExitKey(KEY_NULL);
+    memset(inputBuffer, 0, sizeof(inputBuffer));
+
+    while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
+
+        Color pulse = neonPulse();
+
+        int pw = MeasureText(prompt, 34);
+        DrawText(prompt, w/2 - pw/2, h/3 - 40, 34, pulse);
+
+        Rectangle box = {
+            w * 0.20f,
+            h * 0.45f,
+            w * 0.60f,
+            h * 0.08f
+        };
+
+        DrawRectangleRec(box, (Color){40,40,40,255});
+        DrawRectangleLinesEx(box, 2, pulse);
+
+        DrawText(inputBuffer, box.x + 10, box.y + 12, 26, RAYWHITE);
+
+        const char *hint = "ENTER = OK   ESC = Back";
+        int hw = MeasureText(hint, 20);
+        DrawText(hint, w/2 - hw/2, box.y + box.height * 0.65f, 20, LIGHTGRAY);
+
+
+        EndDrawing();
+
+        if (IsKeyPressed(KEY_BACKSPACE) && strlen(inputBuffer) > 0)
+            inputBuffer[strlen(inputBuffer)-1] = 0;
+
+        int c = GetCharPressed();
+        if (c >= 32 && c <= 126 && strlen(inputBuffer) < 49)
+            inputBuffer[strlen(inputBuffer)] = (char)c;
+
+        if (IsKeyPressed(KEY_ENTER)) return 1;
+        if (IsKeyPressed(KEY_ESCAPE)) return 0;
     }
 }
 
-/* Update a profile */
-void updateProfile() {
-    char name[50];
-    printf("Enter name to update: ");
-    scanf("%49s", name);
+int DrawBackButton() {
+    Button backBtn = { { 40, GetScreenHeight() - 80, 160, 40 }, "Back" };
 
-    Profile *p = searchProfileByName(name);
-    if (!p) { printf("Profile not found.\n"); return; }
+    DrawButtonTheme(backBtn);
 
-    printf("Enter new age: ");
-    scanf("%d", &p->age);
-    printf("Enter new best score: ");
-    scanf("%d", &p->bestScore);
-
-    saveProfiles();
-    printf("Updated successfully.\n");
+    if (ButtonClicked(backBtn)) return 1;
+    return 0;
 }
 
-/* Delete a profile */
-void deleteProfile() {
-    char name[50];
-    printf("Enter name to delete: ");
-    scanf("%49s", name);
 
-    Profile *prev = NULL, *curr = profileHead;
+void addProfile_GUI() {
+    SetExitKey(KEY_NULL);
+    while (1) {
+    if (!themedInputBox("Enter Player Name:")) return;
+    if (strlen(inputBuffer) == 0) return;
+    break;
+}
+    Profile *p = malloc(sizeof(Profile));
+
+    strncpy(p->name, inputBuffer, 49);
+    p->name[49] = 0;
+
+    p->timesPlayed = 0;
+    p->bestScore = 0;
+
+    p->next = profileHead;
+    profileHead = p;
+
+    saveProfiles();
+}
+void searchProfile_GUI() {
+    SetExitKey(KEY_NULL);
+    if (!themedInputBox("Search Player:")) return;
+
+
+    Profile *p = searchProfileByName(inputBuffer);
+
+    while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
+
+        Color pulse = neonPulse();
+
+        // Title
+        const char *title = "SEARCH RESULT";
+        int tw = MeasureText(title, 36);
+        DrawText(title, w/2 - tw/2, 60, 36, pulse);
+
+        float boxW = w * 0.50f;
+        float boxH = h * 0.22f;
+        float boxX = w/2 - boxW/2;
+        float boxY = h/2 - boxH/2;
+
+        DrawRectangle(boxX, boxY, boxW, boxH, (Color){40,40,40,180});
+        DrawRectangleLines(boxX, boxY, boxW, boxH, pulse);
+
+        float tx = boxX + 20;
+        float ty = boxY + 20;
+
+        if (!p) {
+            DrawText("NOT FOUND", tx, ty, 32, RED);
+        } else {
+            DrawText(TextFormat("Name: %s", p->name), tx, ty, 26, RAYWHITE); 
+            ty += 30;
+            DrawText(TextFormat("Times Played: %d", p->timesPlayed), tx, ty, 22, LIGHTGRAY);
+            ty += 30;
+            DrawText(TextFormat("Best Score: %d", p->bestScore), tx, ty, 22, LIGHTGRAY);
+        }
+
+
+        if (DrawBackButton()) return;
+
+        EndDrawing();
+    }
+}
+
+void updateProfile_GUI() {
+    SetExitKey(KEY_NULL);
+    if (!themedInputBox("Enter Old Name:")) return;
+    Profile *p = searchProfileByName(inputBuffer);
+    if (!p) return;
+
+
+    if (!themedInputBox("Enter New Name:")) return;
+
+    strncpy(p->name, inputBuffer, 49);
+    p->name[49] = 0;
+
+    saveProfiles();
+     while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        Color pulse = neonPulse();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,GetScreenWidth(),GetScreenHeight(),
+                               (Color){10,10,10,255},(Color){40,40,40,255});
+
+        float boxW = w * 0.40f;
+        float boxH = h * 0.15f;
+        float boxX = w/2 - boxW/2;
+        float boxY = h/2 - boxH/2;
+
+        DrawRectangle(boxX, boxY, boxW, boxH, (Color){40,40,40,180});
+        DrawRectangleLines(boxX, boxY, boxW, boxH, pulse);
+
+        float tx = boxX + 20;
+        float ty = boxY + 30;
+        DrawText("Profile Updated!", tx, ty, 32, RAYWHITE);
+
+
+        if (DrawBackButton()) return;
+
+        EndDrawing();
+    }
+}
+
+void deleteProfile_GUI() {
+    SetExitKey(KEY_NULL);
+    if (!themedInputBox("Delete Player:")) return;
+
+
+    Profile *prev = NULL;
+    Profile *curr = profileHead;
+
+    int deleted = 0;  // <-- THIS FIXES EVERYTHING
 
     while (curr) {
-        if (strcmp(curr->name, name) == 0) {
+        if (strcmp(curr->name, inputBuffer) == 0) {
             if (!prev) profileHead = curr->next;
             else prev->next = curr->next;
+
             free(curr);
             saveProfiles();
-            printf("Deleted.\n");
-            return;
+            deleted = 1;
+            break;
         }
         prev = curr;
         curr = curr->next;
     }
-    printf("Profile not found.\n");
+
+    while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        Color pulse = neonPulse();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,GetScreenWidth(),GetScreenHeight(),
+                               (Color){10,10,10,255},(Color){40,40,40,255});
+
+        float boxW = w * 0.40f;
+        float boxH = h * 0.15f;
+        float boxX = w/2 - boxW/2;
+        float boxY = h/2 - boxH/2;
+
+        DrawRectangle(boxX, boxY, boxW, boxH, (Color){40,40,40,180});
+        DrawRectangleLines(boxX, boxY, boxW, boxH, pulse);
+
+        float tx = boxX + 20;
+        float ty = boxY + 30;
+
+        if (deleted)
+            DrawText("Profile Deleted!", tx, ty, 32, RED);
+        else
+            DrawText("Profile Not Found", tx, ty, 32, RAYWHITE);
+
+
+                if (DrawBackButton()) return;
+
+                EndDrawing();
+            }
+        }
+    
+
+
+
+void listProfiles_GUI() {
+    SetExitKey(KEY_NULL);
+    int scroll = 0;
+
+    while (1) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
+
+        Color pulse = neonPulse();
+        const char *title = "PLAYER LIST";
+        int tw = MeasureText(title, 36);
+        DrawText(title, w/2 - tw/2, 40, 36, pulse);
+
+        int y = 120 + scroll;
+
+        // Draw profile rows centered
+        Profile *p = profileHead;
+        while (p) {
+            DrawText(
+                TextFormat("%s | Played: %d | Best: %d",
+                    p->name, p->timesPlayed, p->bestScore),
+                w/2 - 250,
+                y,
+                22,
+                RAYWHITE
+            );
+            y += 35;
+            p = p->next;
+        }
+
+        // Scroll wheel
+        scroll += GetMouseWheelMove() * -20;
+
+     
+        if (DrawBackButton()) return;
+
+        EndDrawing();
+    }
+}
+void playerManagerMenu_GUI(void) {
+    SetExitKey(KEY_NULL);
+    SetTargetFPS(144);
+
+    while (!WindowShouldClose()) {
+        int w = GetScreenWidth();
+        int h = GetScreenHeight();
+        float bw = w * 0.30f;
+        float bh = h * 0.07f;
+        float cx = w * 0.50f - bw/2;
+
+        Button addBtn    = {{ cx, h * 0.30f, bw, bh }, "Add Profile" };
+        Button searchBtn = {{ cx, h * 0.40f, bw, bh }, "Search Profile" };
+        Button updateBtn = {{ cx, h * 0.50f, bw, bh }, "Update Profile" };
+        Button deleteBtn = {{ cx, h * 0.60f, bw, bh }, "Delete Profile" };
+        Button listBtn   = {{ cx, h * 0.70f, bw, bh }, "List All Profiles" };
+        Button backBtn   = {{ cx, h * 0.80f, bw, bh }, "Back" };
+
+        BeginDrawing();
+        ClearBackground((Color){15,15,15,255});
+        DrawRectangleGradientV(0,0,w,h,(Color){10,10,10,255},(Color){40,40,40,255});
+
+        Color pulse = neonPulse();
+        const char *title = "PLAYER MANAGER";
+        int tw = MeasureText(title, 38);
+        DrawText(title, w/2 - tw/2, 60, 38, pulse);
+
+        DrawButtonTheme(addBtn);
+        DrawButtonTheme(searchBtn);
+        DrawButtonTheme(updateBtn);
+        DrawButtonTheme(deleteBtn);
+        DrawButtonTheme(listBtn);
+        DrawButtonTheme(backBtn);
+
+        EndDrawing();
+
+        if (ButtonClicked(addBtn))    addProfile_GUI();
+        if (ButtonClicked(searchBtn)) searchProfile_GUI();
+        if (ButtonClicked(updateBtn)) updateProfile_GUI();
+        if (ButtonClicked(deleteBtn)) deleteProfile_GUI();
+        if (ButtonClicked(listBtn))   listProfiles_GUI();
+        if (ButtonClicked(backBtn))   return;
+
+    }
+}
+int showStartScreen(void) {
+    SetExitKey(KEY_NULL);
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground((Color){15, 15, 15, 255});
+        DrawRectangleGradientV(0,0,GetScreenWidth(),GetScreenHeight(),
+                               (Color){10,10,10,255}, (Color){40,40,40,255});
+
+        Color pulse = neonPulse();
+
+        const char *title = "TETRIS";
+        int titleSize = 96;
+        int tW = MeasureText(title, titleSize);
+
+        DrawText(title, GetScreenWidth()/2 - tW/2, 120, titleSize, pulse);
+
+        const char *sub1 = "ENTER  -  Start Game";
+        const char *sub2 = "M      -  Player Manager";
+        const char *sub3 = "Q / ESC - Quit";
+        const char *sub4 = "X      -  Maximize Window";
+        DrawText(sub1, GetScreenWidth()/2 - MeasureText(sub1, 28)/2, 300, 28, LIGHTGRAY);
+        DrawText(sub2, GetScreenWidth()/2 - MeasureText(sub2, 24)/2, 350, 24, LIGHTGRAY);
+        DrawText(sub3, GetScreenWidth()/2 - MeasureText(sub3, 22)/2, 400, 22, GRAY);
+        DrawText(sub4, GetScreenWidth()/2 - MeasureText(sub4, 24)/2, 430, 24, LIGHTGRAY);
+        EndDrawing();
+
+        if (IsKeyPressed(KEY_M)) {
+            playerManagerMenu_GUI();   // open CRUD GUI
+        }
+        if (IsKeyPressed(KEY_X)) {
+            MaximizeWindow();   // If your Raylib supports it
+            // If MaximizeWindow doesn't exist, use:
+            // ToggleFullscreen();
+        }
+
+        if (IsKeyPressed(KEY_ENTER)) {
+            return 1;                  // start game
+        }
+        if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) {
+            return 0;                  // quit
+        }
+    }
+    return 0;
+}
+int askSaveDataScreen(int finalScore) {
+    SetExitKey(KEY_NULL);
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+        const char *msg = "Save this game data?";
+        const char *scoreMsg = TextFormat("Score: %d", finalScore);
+        const char *yesMsg = "Y - Save";
+        const char *noMsg  = "N / ESC - Skip";
+
+        DrawText(msg, GetScreenWidth()/2 - MeasureText(msg, 40)/2, 150, 40, RAYWHITE);
+        DrawText(scoreMsg, GetScreenWidth()/2 - MeasureText(scoreMsg, 30)/2, 220, 30, LIGHTGRAY);
+        DrawText(yesMsg, GetScreenWidth()/2 - MeasureText(yesMsg, 24)/2, 310, 24, GREEN);
+        DrawText(noMsg,  GetScreenWidth()/2 - MeasureText(noMsg,  24)/2, 350, 24, RED);
+
+        EndDrawing();
+
+        if (IsKeyPressed(KEY_Y)) return 1;
+        if (IsKeyPressed(KEY_N) || IsKeyPressed(KEY_ESCAPE)) return 0;
+    }
+    return 0;
+}
+int showGameOverScreen(const char *playerName) {
+    SetExitKey(KEY_NULL);
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+        const char *msg  = "GAME OVER";
+        const char *sub1 = TextFormat("Player: %s", playerName);
+        const char *sub2 = TextFormat("Final Score: %d", score);
+        const char *opt1 = "R - Retry";
+        const char *opt2 = "Q / ESC - Quit to Console";
+
+        int font1 = 72;
+        int textW = MeasureText(msg, font1);
+        float t = GetTime();
+        Color pulse = (Color){255, (int)(64 + 64 * sin(t * 3)), (int)(64 + 64 * sin(t * 3)), 255};
+
+        DrawText(msg, GetScreenWidth()/2 - textW/2, GetScreenHeight()/2 - 150, font1, pulse);
+        DrawText(sub1, GetScreenWidth()/2 - MeasureText(sub1, 26)/2, GetScreenHeight()/2 - 40, 26, RAYWHITE);
+        DrawText(sub2, GetScreenWidth()/2 - MeasureText(sub2, 26)/2, GetScreenHeight()/2,     26, LIGHTGRAY);
+        DrawText(opt1, GetScreenWidth()/2 - MeasureText(opt1, 20)/2, GetScreenHeight()/2 + 80, 20, LIGHTGRAY);
+        DrawText(opt2, GetScreenWidth()/2 - MeasureText(opt2, 20)/2, GetScreenHeight()/2 + 110,20, GRAY);
+
+        EndDrawing();
+
+        if (IsKeyPressed(KEY_R)) return 1;
+        if (IsKeyPressed(KEY_Q) || IsKeyPressed(KEY_ESCAPE)) return 0;
+    }
+    return 0;
+}
+void resetGameState(void) {
+    memset(Table, 0, sizeof(Table));
+    score    = 0;
+    level    = 0;
+    timer_ms = BASE_TIMER_MS;
+    GameOn   = TRUE;
+
+    safe_free_shape(&current);
+    freeQueue();
+    for (int i = 0; i < 3; ++i) {
+        enqueueShape(rand() % 7);
+    }
+    int shapeIndex = dequeueShape();
+    enqueueShape(rand() % 7);
+    SetNewRandomShape(shapeIndex);
 }
 
-/* List all profiles */
-void listProfiles() {
-    Profile *p = profileHead;
-    if (!p) {
-        printf("No profiles found.\n");
+void playGame(Profile *player) {
+    int winW = 1000;
+    int winH = 800;
+
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(winW, winH, "Tetris - Raylib GUI");
+    SetTargetFPS(144);
+    SetExitKey(KEY_NULL);
+
+    // Start screen first
+    int startChoice = showStartScreen();
+    if (startChoice == 0) {
+        CloseWindow();
         return;
     }
 
-    // count profiles
-    int count = 0;
-    for (Profile *tmp = profileHead; tmp; tmp = tmp->next) count++;
+    resetGameState();
 
-    // make array
-    Profile **arr = malloc(count * sizeof(Profile*));
-    int i = 0;
-    for (Profile *tmp = profileHead; tmp; tmp = tmp->next) {
-        arr[i++] = tmp;
-    }
+    double nextFall = GetTime() + timer_ms / 1000.0;
+    double startTime = GetTime();
+    int paused = 0;
+    int shapeIndex = 0;
 
-    // comparator (descending by bestScore)
-    int cmp(const void *a, const void *b) {
-        Profile *pa = *(Profile **)a;
-        Profile *pb = *(Profile **)b;
-        return pb->bestScore - pa->bestScore;
-    }
-
-    // sort it
-    qsort(arr, count, sizeof(Profile*), cmp);
-
-    // print
-    printf("\n=== PROFILES SORTED BY BEST SCORE ===\n");
-    for (int j = 0; j < count; j++) {
-        printf("%-15s Age: %-3d BestScore: %d\n",
-            arr[j]->name, arr[j]->age, arr[j]->bestScore);
-    }
-    printf("=====================================\n");
-
-    free(arr);
-}
-
-
-/* Player Manager Menu */
-void playerManagerMenu() {
-    int choice = 0;
-    do {
-        printf("\n==== PLAYER MANAGER ====\n");
-        printf("1. Add Profile\n");
-        printf("2. Search Profile\n");
-        printf("3. Update Profile\n");
-        printf("4. Delete Profile\n");
-        printf("5. List All Profiles\n");
-        printf("6. Back\n");
-        printf("Choose: ");
-        scanf("%d", &choice);
-
-        switch (choice) {
-            case 1: addProfile(); break;
-            case 2: searchProfile(); break;
-            case 3: updateProfile(); break;
-            case 4: deleteProfile(); break;
-            case 5: listProfiles(); break;
-            case 6: break;
-            default: printf("Invalid.\n");
+    while (GameOn && !WindowShouldClose()) {
+        // Quit mid-game
+        if (IsKeyPressed(KEY_Q)) {
+            GameOn = FALSE;
+            break;
         }
-    } while (choice != 6);
+
+        if (IsKeyPressed(KEY_P)) {
+            paused = !paused;
+        }
+
+        if (!paused) {
+            // Movement
+            if (IsKeyPressed(KEY_A) || IsKeyDown(KEY_LEFT)) {
+                if (ManipulateCurrent('a', &shapeIndex)) {}
+            }
+            if (IsKeyPressed(KEY_D) || IsKeyDown(KEY_RIGHT)) {
+                if (ManipulateCurrent('d', &shapeIndex)) {}
+            }
+            if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) {
+                if (ManipulateCurrent('w', &shapeIndex)) {}
+            }
+
+            // Hard drop
+            if (IsKeyPressed(KEY_SPACE)) {
+                while (CheckPositionAt(current.array, current.width, current.row + 1, current.col)) {
+                    current.row++;
+                }
+                WriteToTable();
+                RemoveFullRowsAndUpdateScore();
+                shapeIndex = dequeueShape();
+                enqueueShape(rand() % 7);
+                SetNewRandomShape(shapeIndex);
+            }
+
+            // Gravity
+            double now = GetTime();
+            double fallDelay = timer_ms / 1000.0;
+
+            if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) {
+                fallDelay = 0.06;
+            }
+
+            if (now >= nextFall) {
+                if (!CheckPositionAt(current.array, current.width, current.row + 1, current.col)) {
+                    // lock piece
+                    WriteToTable();
+                    RemoveFullRowsAndUpdateScore();
+                    shapeIndex = dequeueShape();
+                    enqueueShape(rand() % 7);
+                    SetNewRandomShape(shapeIndex);
+                } else {
+                    current.row++;
+                }
+                nextFall = now + fallDelay;
+            }
+
+            // Dynamic difficulty
+            double elapsed = GetTime() - startTime;
+            int timeLevel  = (int)(elapsed / 30.0);
+            int scoreLevel = score / 1000;
+            level = (timeLevel > scoreLevel) ? timeLevel : scoreLevel;
+
+            int new_timer = BASE_TIMER_MS - (level * 15);
+            if (new_timer < MIN_TIMER_MS) new_timer = MIN_TIMER_MS;
+            timer_ms = new_timer;
+        }
+
+        // RENDER
+        winW = GetScreenWidth();
+        winH = GetScreenHeight();
+        // compute dynamic grid anchor
+        GRID_X = winW * 0.10f;
+        GRID_Y = winH * 0.10f;
+
+        // dynamic layout anchor points
+        // Dynamically scale cell size based on window height
+        CELL = (winH - GRID_Y - 40) / ROWS;
+
+        // Hard limits so it doesn't become microscopic or insane
+        if (CELL < 16) CELL = 16;
+        if (CELL > 48) CELL = 48;
+
+
+
+        BeginDrawing();
+        ClearBackground((Color){20, 20, 20, 255});
+        DrawRectangleGradientV(0, 0, winW, winH,
+                               (Color){10,10,10,255}, (Color){35,35,35,255});
+
+        float sidebarX = winW * 0.70f;
+        float sidebarY = winH * 0.10f;
+
+        float t = GetTime();
+        int r = (int)(128 + 127 * sin(t * 2.0));
+        int g = (int)(128 + 127 * sin(t * 2.0 + 2.0));
+        int b = (int)(128 + 127 * sin(t * 2.0 + 4.0));
+        Color titleColor = (Color){r, g, b, 255};
+
+        DrawText("TETRIS", GRID_X, 20, 32, titleColor);
+
+        DrawText(TextFormat("Player: %s", player->name),
+                 sidebarX, sidebarY - 10, 18, LIGHTGRAY);
+
+        DrawText(TextFormat("Score: %d", score), sidebarX, sidebarY + 20, 22, RAYWHITE);
+        DrawText(TextFormat("Level: %d", level), sidebarX, sidebarY + 50, 18, LIGHTGRAY);
+        DrawText(TextFormat("Gravity: %d ms", timer_ms), sidebarX, sidebarY + 70, 18, LIGHTGRAY);
+
+        DrawText("Next:", sidebarX, sidebarY + 100, 20, DARKGRAY);
+        int nextW = ShapeWidths[peekNextShape()];
+        int nextPreviewY = sidebarY + (CELL * 2);
+        drawNextPreview(sidebarX + CELL, nextPreviewY);
+
+        int nextPreviewHeight = nextW * CELL;
+        int controlBoxY = nextPreviewY + nextPreviewHeight + (CELL * 1.5f);
+
+        float controlBoxX = sidebarX - 15;
+        float controlBoxW = CELL * 10;
+        float controlBoxH = CELL * 6;
+
+
+
+        DrawRectangle(controlBoxX, controlBoxY, controlBoxW, controlBoxH,
+                      Fade((Color){50,50,50,255}, 0.6f));
+        DrawRectangleLines(controlBoxX, controlBoxY, controlBoxW, controlBoxH,
+                           (Color){90,90,90,255});
+            float textX = controlBoxX + 20;   // padding inside the box
+            float textY = controlBoxY + 10;
+
+            DrawText("Controls:", textX, textY, 16, RAYWHITE);
+            textY += 25;
+
+            DrawText("A/D or Left/Right : Move", textX, textY, 14, LIGHTGRAY);
+            textY += 20;
+
+            DrawText("S or Down         : Soft Drop", textX, textY, 14, LIGHTGRAY);
+            textY += 20;
+
+            DrawText("Space             : Hard Drop", textX, textY, 14, LIGHTGRAY);
+            textY += 20;
+
+            DrawText("W or Up           : Rotate", textX, textY, 14, LIGHTGRAY);
+            textY += 20;
+
+            DrawText("P: Pause   Q: Quit", textX, textY, 14, LIGHTGRAY);
+
+
+
+        drawGridAndCurrent();   // draw grid normally
+
+        if (paused) {
+            DrawRectangle(0, 0, winW, winH, Fade(BLACK, 0.6f));  // overlay ABOVE EVERYTHING
+            const char *pauseText = "PAUSED";
+            int fontSize = 64;
+            int textWidth = MeasureText(pauseText, fontSize);
+            int x = winW/2 - textWidth/2;
+            int y = winH/2 - fontSize/2;
+            DrawText(pauseText, x, y, fontSize, RAYWHITE);
+
+            const char *resumeHint = "Press P to resume";
+            int hintSize = 22;
+            int hintWidth = MeasureText(resumeHint, hintSize);
+            DrawText(resumeHint, winW/2 - hintWidth/2, y + fontSize + 15, hintSize, LIGHTGRAY);
+        }
+
+
+        EndDrawing();
+
+        // Simple top-out check: if immediately on spawn invalid, GameOn is FALSE
+        if (!GameOn) break;
+    }
+
+    safe_free_shape(&current);
+    freeQueue();
+
+    if (!WindowShouldClose()) {
+        int retry = showGameOverScreen(player->name);
+        int saveChoice = askSaveDataScreen(score);
+
+        // Always increment timesPlayed when game ended
+        player->timesPlayed++;
+
+        if (saveChoice == 1) {
+            if (score > player->bestScore) {
+                player->bestScore = score;
+            }
+            saveScore(player->name, score);
+        }
+        saveProfiles();
+
+        if (retry == 1) {
+            // restart without leaving
+            resetGameState();
+            playGame(player);
+            CloseWindow();
+            return;
+        }
+    }
+
+    CloseWindow();
 }
-
-
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     srand((unsigned)time(NULL));
 
-    int choice = 0; char name[50];
-    printf("Enter your name: ");
-    if (scanf("%49s", name) != 1) return 1;
-    flush_stdin();
     loadProfiles();
-    // Auto create profile if not exists
-    Profile *existing = searchProfileByName(name);
-    if (!existing) {
-        Profile *p = (Profile *)malloc(sizeof(Profile));
+
+    char name[50];
+    printf("Enter your player name: ");
+    if (scanf("%49s", name) != 1) {
+        return 1;
+    }
+    flush_stdin();
+
+    Profile *p = searchProfileByName(name);
+    if (!p) {
+        p = (Profile *)malloc(sizeof(Profile));
         strncpy(p->name, name, 49);
         p->name[49] = '\0';
-        p->age = 0;          // default age
-        p->bestScore = 0;    // default score
+        p->timesPlayed = 0;
+        p->bestScore   = 0;
         p->next = profileHead;
         profileHead = p;
-
         saveProfiles();
-        printf("New profile created for %s.\n", name);
     }
 
+    currentPlayer = p;
 
-
+    int choice = 0;
     do {
-    printf("\n==== TETRIS MENU ====\n");
-    printf("1. New Game\n");
-    printf("2. View High Scores\n");
-    printf("3. Clear High Scores\n");
-    printf("4. Player Manager (CRUD)\n");
-    printf("5. Quit\n");
-    printf("Choose an option: ");
-
-    if (scanf("%d", &choice) != 1) {
-        flush_stdin();
-        printf("Invalid choice.\n");
-        continue;
-    }
-    flush_stdin();
-
-    switch (choice) {
-        case 1:
-            memset(Table, 0, sizeof(Table));
-            score = 0;
-            timer_ms = BASE_TIMER_MS;
-            GameOn = TRUE;
-            playGame(name);
-            break;
-
-        case 2:
-            showScores();
-            break;
-
-        case 3:
-            clearScores();
-            break;
-
-        case 4:
-            playerManagerMenu();
-            break;
-
-        case 5:
-            printf("Goodbye, %s!\n", name);
-            break;
-
-        default:
+        printf("\n==== TETRIS MENU ====\n");
+        printf("1. New Game\n");
+        printf("2. View High Scores\n");
+        printf("3. Clear High Scores\n");
+        printf("4. Quit\n");
+        printf("Choose: ");
+        if (scanf("%d", &choice) != 1) {
+            flush_stdin();
             printf("Invalid choice.\n");
-    }
+            continue;
+        }
+        flush_stdin();
 
-} while (choice != 5);
-
+        switch (choice) {
+            case 1:
+                playGame(currentPlayer);
+                break;
+            case 2:
+                showScores();
+                break;
+            case 3:
+                clearScores();
+                break;
+            case 4:
+                printf("Goodbye, %s.\n", currentPlayer->name);
+                break;
+            default:
+                printf("Invalid choice.\n");
+        }
+    } while (choice != 4);
 
     return 0;
 }
+
+
+
+
+
+
