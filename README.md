@@ -52,14 +52,21 @@ Each player profile stores:
 - Real-time rendering, timing, and input handling with Raylib  
 
 ## Project Structure
-tetris.h // Shared declarations, structs, constants, extern variables
-main.c // Entry point, window setup, main menu, profile selection
-game_logic.c // Core Tetris logic: spawning, movement, rotation, scoring
-board.c // Rendering of grid, preview, HUD, buttons, dialogs
-file_manager.c // Profile CRUD operations, high score management, persistence
+tetris.h // 
+Shared declarations, structs, constants, extern variables
+main.c // 
+Entry point, window setup, main menu, profile selection
+game_logic.c // 
+Core Tetris logic: spawning, movement, rotation, scoring
+board.c // 
+Rendering of grid, preview, HUD, buttons, dialogs
+file_manager.c // 
+Profile CRUD operations, high score management, persistence
 
-playerdb.txt // Auto-generated profile database
-scores.txt // Auto-generated high score file
+playerdb.txt // 
+Auto-generated profile database
+scores.txt // 
+Auto-generated high score file
 
 ## Building the Project
 Example (gcc):
