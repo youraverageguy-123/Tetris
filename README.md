@@ -63,8 +63,8 @@ scores.txt // Auto-generated high score file
 
 ## Building the Project
 Example (gcc):
-gcc main.c game_logic.c board.c file_manager.c -lraylib -lm -o tetris
-Raylib must be installed on the system and properly linked.
+- gcc main.c game_logic.c board.c file_manager.c -lraylib -lm -o tetris
+- Raylib must be installed on the system and properly linked.
 
 ## Running the Program
 
