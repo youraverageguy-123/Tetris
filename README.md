@@ -1,4 +1,4 @@
-# Tetris Game in C (Raylib)
+# Tetris Game in C with CRUD 
 
 ## Overview
 This project is a complete implementation of the classic Tetris game using the C programming language and the Raylib graphics library.  
