@@ -1,9 +1,10 @@
 # Tetris Game in C with CRUD 
 
 ## Overview
-This project is a complete implementation of the classic Tetris game using the C programming language and the Raylib graphics library.  
-It demonstrates real-time game mechanics, structured program design, GUI interaction, and persistent data storage.  
-The project uses pointers, dynamic memory allocation, structs, linked lists, and text-based file I/O, meeting all required course concepts.
+
+- This project is a complete implementation of the classic Tetris game using the C programming language and the Raylib graphics library.  
+- It demonstrates real-time game mechanics, structured program design, GUI interaction, and persistent data storage.  
+- The project uses pointers, dynamic memory allocation, structs, linked lists, and text-based file I/O, meeting all required course concepts.
 
 ## Features
 
@@ -52,25 +53,28 @@ Each player profile stores:
 - Real-time rendering, timing, and input handling with Raylib  
 
 ## Project Structure
-tetris.h // Shared declarations, structs, constants, extern variables
-main.c // Entry point, window setup, main menu, profile selection
-game_logic.c // Core Tetris logic: spawning, movement, rotation, scoring
-board.c // Rendering of grid, preview, HUD, buttons, dialogs
-file_manager.c // Profile CRUD operations, high score management, persistence
 
-playerdb.txt // Auto-generated profile database
-scores.txt // Auto-generated high score file
+-> tetris.h  //  Shared declarations, structs, constants, extern variables
+-> main.c  //  Entry point, window setup, main menu, profile selection
+-> game_logic.c  //  Core Tetris logic: spawning, movement, rotation, scoring
+-> board.c  //  Rendering of grid, preview, HUD, buttons, dialogs
+-> file_manager.c  //  Profile CRUD operations, high score management, persistence
+
+-> playerdb.txt // Auto-generated profile database
+-> scores.txt // Auto-generated high score file
 
 ## Building the Project
-Example (gcc):
-gcc main.c game_logic.c board.c file_manager.c -lraylib -lm -o tetris
-Raylib must be installed on the system and properly linked.
+
+- Example (gcc): gcc main.c game_logic.c board.c file_manager.c -lraylib -lm -o tetris
+
+- Raylib must be installed on the system and properly linked.
 
 ## Running the Program
 
 ## Controls
-- A / Left Arrow: Move left  
-- D / Right Arrow: Move right  
+- A / Left Arrow: Move left
+- D / Right Arrow: Move right
+- *(when you use left/right arrow,the block fastly shifts to the edge of the board.)
 - W / Up Arrow: Rotate  
 - S / Down Arrow: Soft drop  
 - Space: Hard drop  
